@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	controller "../controllers"
-	"../store"
+	controller "github.com/MwaitforitOsama/go-auth/controller"
+	"github.com/MwaitforitOsama/go-auth/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )

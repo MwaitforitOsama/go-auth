@@ -1,6 +1,6 @@
 package goauth
 
-import "../utils"
+import "github.com/MwaitforitOsama/go-auth/utils"
 
 func (a *App) LoadRoutes() {
 	a.Router.Post("/login", utils.ApiFunc(a.Controller.Login))

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"../model"
+	"github.com/MwaitforitOsama/go-auth/model"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )

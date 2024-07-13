@@ -9,9 +9,9 @@ import (
 	"os"
 	"time"
 
-	"../model"
-	"../store"
-	"../utils"
+	"github.com/MwaitforitOsama/go-auth/model"
+	"github.com/MwaitforitOsama/go-auth/store"
+	"github.com/MwaitforitOsama/go-auth/utils"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
