@@ -7,8 +7,8 @@ import (
 	"log"
 	"time"
 
-	"../model"
-	"../utils"
+	"github.com/MwaitforitOsama/go-auth/model"
+	"github.com/MwaitforitOsama/go-auth/utils"
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 )
