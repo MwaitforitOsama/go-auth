@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hanzalahimran7/go-auth/model"
+	"github.com/MwaitforitOsama/go-auth/model"
 )
 
 type DatabaseStore interface {

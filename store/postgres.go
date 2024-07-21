@@ -35,14 +35,17 @@ func NewPostgresDB(host, port, user, password, dbName string) *PostgresDB {
 }
 
 func (p *PostgresDB) RunMigration() error {
-	query := `CREATE TABLE IF NOT EXISTS users (
+	query := `
+	CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY,
         first_name VARCHAR(255) NOT NULL,
         last_name VARCHAR(255) NOT NULL,
         email VARCHAR(255) NOT NULL UNIQUE,
         password VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AT TIME ZONE 'UTC',
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AT TIME ZONE 'UTC'
     );
+
     CREATE TABLE IF NOT EXISTS refresh_tokens (
         id SERIAL PRIMARY KEY,
         user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -51,21 +54,49 @@ func (p *PostgresDB) RunMigration() error {
         revoked BOOLEAN DEFAULT FALSE,
         CONSTRAINT fk_user_id FOREIGN KEY (user_id) REFERENCES users(id)
     );
+
+    CREATE OR REPLACE FUNCTION update_updated_at_column()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        NEW.updated_at = CURRENT_TIMESTAMP AT TIME ZONE 'UTC';
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER set_updated_at
+    BEFORE UPDATE ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
 	`
-	_, err := p.db.Exec(string(query))
+
+	// Begin a transaction
+	tx, err := p.db.Begin()
 	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	// Execute the query within the transaction
+	_, err = tx.Exec(query)
+	if err != nil {
+		tx.Rollback()
 		return fmt.Errorf("failed to execute migration: %w", err)
 	}
+
+	// Commit the transaction
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
 	log.Println("Migration executed successfully!")
 	return nil
 }
 
 func (p *PostgresDB) Signup(ctx context.Context, user *model.User) error {
 	query := `
-        INSERT INTO users (id, first_name, last_name, email, password, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO users (id, first_name, last_name, email, password, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
     `
-	_, err := p.db.ExecContext(ctx, query, user.Id, user.FirstName, user.LastName, user.Email, user.Password, user.CreatedAt)
+	_, err := p.db.ExecContext(ctx, query, user.Id, user.FirstName, user.LastName, user.Email, user.Password, user.CreatedAt, user.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("FAILED TO SIGN UP: %w", err)
 	}
@@ -74,14 +105,17 @@ func (p *PostgresDB) Signup(ctx context.Context, user *model.User) error {
 
 func (p *PostgresDB) Login(ctx context.Context, email string, password string) (model.User, error) {
 	user := model.User{}
-	if err := p.db.QueryRow("SELECT * from users where email = $1", email).Scan(
+	query := "SELECT id, first_name, last_name, email, password, created_at, updated_at FROM users WHERE email = $1"
+	err := p.db.QueryRowContext(ctx, query, email).Scan(
 		&user.Id,
 		&user.FirstName,
 		&user.LastName,
 		&user.Email,
 		&user.Password,
 		&user.CreatedAt,
-	); err != nil {
+		&user.UpdatedAt,
+	)
+	if err != nil {
 		return model.User{}, err
 	}
 	if !utils.CheckPasswordHash(password, user.Password) {
@@ -95,13 +129,16 @@ func (p *PostgresDB) Login(ctx context.Context, email string, password string) (
 
 func (p *PostgresDB) GetUser(ctx context.Context, id string) (model.User, error) {
 	user := model.User{}
-	if err := p.db.QueryRow("SELECT id, first_name, last_name, email, created_at from users where id = $1", id).Scan(
+	query := "SELECT id, first_name, last_name, email, created_at, updated_at FROM users WHERE id = $1"
+	err := p.db.QueryRowContext(ctx, query, id).Scan(
 		&user.Id,
 		&user.FirstName,
 		&user.LastName,
 		&user.Email,
 		&user.CreatedAt,
-	); err != nil {
+		&user.UpdatedAt,
+	)
+	if err != nil {
 		return model.User{}, err
 	}
 	return user, nil
@@ -122,14 +159,20 @@ func (p *PostgresDB) DeleteUser(ctx context.Context, id string) error {
 
 func (p *PostgresDB) UpdateUser(ctx context.Context, user model.EditUserRequest, id string) (model.User, error) {
 	updateUser := model.User{}
-	if err := p.db.QueryRow("UPDATE users SET first_name = $1, last_name = $2, email = $3 WHERE id = $4 RETURNING id, first_name, last_name, email, created_at",
-		user.FirstName, user.LastName, user.Email, id).Scan(
+	query := `
+		UPDATE users 
+		SET first_name = $1, last_name = $2, email = $3, updated_at = NOW() 
+		WHERE id = $4 
+		RETURNING id, first_name, last_name, email, created_at, updated_at`
+	err := p.db.QueryRowContext(ctx, query, user.FirstName, user.LastName, user.Email, id).Scan(
 		&updateUser.Id,
 		&updateUser.FirstName,
 		&updateUser.LastName,
 		&updateUser.Email,
 		&updateUser.CreatedAt,
-	); err != nil {
+		&updateUser.UpdatedAt,
+	)
+	if err != nil {
 		return model.User{}, err
 	}
 	return updateUser, nil
