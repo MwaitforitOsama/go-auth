@@ -36,14 +36,16 @@ func NewPostgresDB(host, port, user, password, dbName string) *PostgresDB {
 
 func (p *PostgresDB) RunMigration() error {
 	query := `
+	DROP TRIGGER IF EXISTS set_updated_at ON users;
+
 	CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY,
         first_name VARCHAR(255) NOT NULL,
         last_name VARCHAR(255) NOT NULL,
         email VARCHAR(255) NOT NULL UNIQUE,
         password VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AT TIME ZONE 'UTC',
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP AT TIME ZONE 'UTC'
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS refresh_tokens (
@@ -70,24 +72,29 @@ func (p *PostgresDB) RunMigration() error {
 	`
 
 	// Begin a transaction
+	println("I reached here")
 	tx, err := p.db.Begin()
 	if err != nil {
+		fmt.Printf("Failed to begin transaction: %v\n", err)
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
+	println("Begin Transaction")
 
 	// Execute the query within the transaction
 	_, err = tx.Exec(query)
 	if err != nil {
-		tx.Rollback()
+		tx.Rollback() // Rollback in case of an error
+		fmt.Printf("Failed to execute migration query: %v\n", err)
 		return fmt.Errorf("failed to execute migration: %w", err)
 	}
 
 	// Commit the transaction
 	if err := tx.Commit(); err != nil {
+		fmt.Printf("Failed to commit transaction: %v\n", err)
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	log.Println("Migration executed successfully!")
+	fmt.Println("Migration executed successfully!")
 	return nil
 }
 
